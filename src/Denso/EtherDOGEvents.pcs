@@ -1,0 +1,127 @@
+'!TITLE "EtherDOG Communication Library Events"
+#Include "EtherDOG.h"
+#Include "ArrayUtils.pcs"
+
+#Include "VAR_TAB.h"
+
+Sub Main
+
+	'
+	
+End Sub
+
+Sub OnStatusChanged(nStatus As Integer)
+
+	Select Case nStatus
+
+		Case STATUS_CONNECTED
+			'
+
+		Case STATUS_DISCONNECTED
+			'
+
+	End Select
+
+End Sub
+
+Sub OnReceivedData(data As Variant)
+
+	If GetArrayCount(data) <> 86 Then
+
+		' Out of range
+		Err.Raise &H80500127
+
+	End If
+
+	DefIO inIo(63) = Bit, 192
+
+	Dim nIndex As Integer = 0
+
+	' Here we can parse the data
+	P[PPickBelt] = ReadPosition(nIndex, data, nIndex)
+	P[PPickFlipper] = ReadPosition(nIndex, data, nIndex)
+
+	P[PDeposit] = ReadPosition(nIndex, data, nIndex)
+
+	' Read the IOs
+	Dim tmpBytes As Variant
+	Dim byteIndex As Integer
+	Dim bitIndex As Integer
+	Dim tmpIndex AS Integer
+
+	tmpBytes = ReadBytes(nIndex, 8, data, nIndex)
+
+	For byteIndex = 0 To UBound(tmpBytes)
+
+		For bitIndex = 0 To 7
+
+			tmpIndex = byteIndex * 8 + bitIndex
+
+			If (tmpBytes(byteIndex) And (1 << bitIndex)) <> 0 Then
+
+				inIo(tmpIndex) = 1
+
+			Else
+
+				inIo(tmpIndex) = 0
+
+			End If
+
+		Next
+
+	Next
+
+End Sub
+
+Function OnSendData() As Variant
+
+	DefIO outIo(63) = Bit, 256
+
+	Dim dataToSend As Variant
+	Dim cIndex As Integer = 0
+
+	' Here we can add the data to our packet
+	cIndex = WriteInt32(cIndex, SysState, dataToSend)
+
+	cIndex = WriteInt32(cIndex, I[IErrorCode], dataToSend)
+	cIndex = WriteInt32(cIndex, I[IWarningCode], dataToSend)
+
+	cIndex = WritePosition(cIndex, CurPos, dataToSend)
+
+	Dim byteVariant As Variant
+	Dim byteIndex As Integer
+	Dim ioIndex As Integer
+	Dim bitIndex As Integer
+
+	' Convert the IO array to variant
+	byteVariant = CreateArray(Int(64 / 8), VT_UI1)
+
+	For byteIndex = 0 To UBound(byteVariant)
+
+		For bitIndex = 0 To 7
+
+			ioIndex = (byteIndex * 8) + bitIndex
+
+			If ioIndex < 64 Then
+
+				If outIo(ioIndex) = 1 Then
+
+					byteVariant(byteIndex) = byteVariant(byteIndex) Or (1 << bitIndex)
+
+				Else
+
+					byteVariant(byteIndex) = byteVariant(byteIndex) And (Not (1 << bitIndex))
+
+				End If
+
+			End If
+
+		Next
+
+	Next
+
+	cIndex = WriteBytes(cIndex, byteVariant, dataToSend)
+
+	OnSendData = dataToSend
+
+End Function

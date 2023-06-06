@@ -1,0 +1,231 @@
+'!TITLE "EtherDOG Communication Library"
+#Include "EtherDOG.h"
+#Include "EtherDOGEvents.pcs"
+
+Sub Main
+
+	On Error GoTo lbRestart
+
+lbRestart:
+	If Comm.State(tcpClientLine) > 0 Then
+
+		Comm.Clear tcpClientLine
+		Comm.Close tcpClientLine
+
+		Call OnStatusChanged(STATUS_DISCONNECTED)
+
+		Delay 500
+
+	End If
+
+	' Open the TCP client
+	Comm.Open tcpClientLine
+
+	' Wait for the connection
+	Wait Comm.State(tcpClientLine) = 2
+
+	If Comm.State(tcpClientLine) <> 2 Then
+
+		GoTo lbRestart
+
+	End If
+	
+	Call OnStatusChanged(STATUS_CONNECTED)
+
+	Dim tmpData As Variant
+
+	tmpData = CreateArray(1, VT_UI1)
+
+	' Loop forever
+	While True
+
+		Dim receivedData As Variant
+
+		Dim requestId As Integer
+		Dim canReceive As Integer
+		Dim data As Variant
+
+		' Receive the PLC message
+		receivedData = ReceiveData()
+
+		requestId = receivedData(0)
+		canReceive = receivedData(1)
+		data = receivedData(2)
+
+		' Check if there is any difference between the current and previous data
+		If AreArraysDifferent(tmpData, data) Then
+
+			' If so then raise an event by calling the resulting method
+			Call OnReceivedData(data)
+
+			' Store the new data
+			tmpData = data
+
+		End If
+
+		' Check if we have to send something
+		If canReceive = 1 Then
+
+			Dim dataToSend As Variant
+
+			dataToSend = OnSendData()
+
+			Call SendData(requestId, dataToSend)
+
+		End If
+
+	WEnd
+
+End Sub
+
+Sub EtherDogInit(clientLine As Integer)
+
+	tcpClientLine = clientLine
+
+	Run EtherDOG
+
+End Sub
+
+Function ReceiveData() As Variant
+
+	Dim receivedData As Variant
+	Dim receivedDataCount As Integer
+
+	Dim tmpCount As Integer
+
+	tmpCount = Comm.Count(tcpClientLine)
+
+	' Receive the header
+	receivedData = Comm.Input(tcpClientLine, -1, MESSAGE_HEADER_LENGTH)
+	receivedDataCount = GetArrayCount(receivedData)
+
+	If receivedDataCount = 0 Then
+
+		' Out of range exception
+		Err.Raise &H80500127
+
+	End If
+
+	If receivedDataCount < MESSAGE_HEADER_LENGTH Then
+
+		' Out of range exception
+		Err.Raise &H80500127
+
+	End If
+
+	' Check EtherDOG header
+	If receivedData(0) <> &H45 Or _
+		receivedData(1) <> &H54 Or _
+		receivedData(2) <> &H48 Or _
+		receivedData(3) <> &H45 Or _
+		receivedData(4) <> &H52 Or _
+		receivedData(5) <> &H44 Or _
+		receivedData(6) <> &H4F Or _
+		receivedData(7) <> &H47 Then
+
+		' Invalid argument exception
+		Err.Raise &H80600007
+
+	End If
+
+	Dim requestId As Integer
+
+	' Gather the request Id
+	requestId = receivedData(8)
+
+	Dim canReceive As Integer
+
+	' Gather the can receive byte
+	canReceive = receivedData(9)
+
+	' Parse the message length
+	Dim messageDataLength As Integer
+
+	messageDataLength = (((receivedData(10) And &HFF) << 24) Or _
+		(receivedData(11) And &HFF << 16) Or _
+		(receivedData(12) And &HFF << 8) Or _
+		(receivedData(13) And &HFF))
+
+	' Signed short
+	If messageDataLength < 0 Or messageDataLength > 32767 Then
+
+		' Out of range exception
+		Err.Raise &H80500127
+
+	End If
+
+	' Receive the remaining data
+	receivedData = Comm.Input(tcpClientLine, 2000, messageDataLength)
+	receivedDataCount = GetArrayCount(receivedData)
+
+	If messageDataLength > 0 And receivedDataCount = 0 Then
+
+		' Out of range exception
+		Err.Raise &H80500127
+
+	End If
+
+	If receivedDataCount <> messageDataLength Then
+
+		' Out of range exception
+		Err.Raise &H80500127
+
+	End If
+
+	ReceiveData = Array(requestId, canReceive, receivedData)
+
+End Function
+
+Sub SendData(requestId As Integer, data As Variant)
+
+	Dim message As Variant
+	Dim dataLength As Integer
+
+	dataLength = GetArrayCount(data)
+
+	message = CreateArray(MESSAGE_HEADER_LENGTH + dataLength, VT_UI1)
+
+	'
+	' EtherDOG Message Identifier
+	'
+
+	message(0) = &H45 ' E
+	message(1) = &H54 ' T
+	message(2) = &H48 ' H
+	message(3) = &H45 ' E
+	message(4) = &H52 ' R
+	message(5) = &H44 ' D
+	message(6) = &H4F ' O
+	message(7) = &H47 ' G
+
+	'
+	' Request ID
+	'
+
+	message(8) = (requestId And &HFF)
+
+	'
+	' Can Receive has to be up all the time when we send the message
+	'
+
+	message(9) = (1 And &HFF)
+
+	'
+	' Length of Message
+	'
+
+	' NOTE: The order is reversed
+	message(10) = ((dataLength >> 24) And &HFF)
+	message(11) = ((dataLength >> 16) And &HFF)
+	message(12) = ((dataLength >> 8) And &HFF)
+	message(13) = (dataLength And &HFF)
+
+	'
+	' Data
+	'
+	Call WriteBytes(14, data, message)
+
+	' Send the packet
+	Comm.Output tcpClientLine, message, 2000
+
+End Sub

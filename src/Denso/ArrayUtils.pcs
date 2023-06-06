@@ -1,0 +1,226 @@
+'!TITLE "Utilies to parse data off arrays"
+#Include "Variant.h"
+
+Sub Main
+
+	'
+	
+End Sub
+
+Function ReadBytes(ByVal sIndex As Integer, count As Integer, data As Variant, ByRef nIndex As Integer) As Variant
+
+	Dim bytes As Variant
+
+	bytes = CreateArray(count, VT_UI1)
+
+	Dim dIndex As Integer
+
+	For dIndex = 0 To count - 1
+
+		bytes(dIndex) = data(sIndex + dIndex)
+
+	Next
+
+	ReadBytes = bytes
+	nIndex = sIndex + count
+
+End Function
+
+Function WriteBytes(sIndex As Integer, dataToWrite As Variant, data As Variant) As Integer
+
+	Dim arrCount As Integer
+
+	arrCount = GetArrayCount(dataToWrite)
+
+	WriteByteArray dataToWrite, data, sIndex, arrCount
+	WriteBytes = sIndex + arrCount
+
+End Function
+
+Function ReadInt16(ByVal sIndex As Integer, data As Variant, ByRef nIndex As Integer) As Integer
+
+	Dim bytes As Variant
+
+	bytes = ReadBytes(sIndex, 2, data, nIndex)
+
+	ReadInt16 = bytes(1) * 256 + bytes(0)
+
+	If ReadInt16 > 32767 Then
+
+		ReadInt16 = ReadInt16 - 65536
+
+	End If
+
+End Function
+
+Function WriteInt16(sIndex As Integer, number As Integer, data As Variant) As Integer
+
+	WriteByteArray number, data, sIndex, 2
+	WriteInt16 = sIndex + 2
+
+End Function
+
+Function ReadInt32(ByVal sIndex As Integer, data As Variant, ByRef nIndex As Integer) As Integer
+
+	ReadByteArray ReadInt32, data, sIndex, 4
+	nIndex = sIndex + 4
+
+End Function
+
+Function WriteInt32(sIndex As Integer, number As Integer, data As Variant) As Integer
+
+	WriteByteArray number, data, sIndex, 4
+	WriteInt32 = sIndex + 4
+
+End Function
+
+Function ReadFloat(ByVal sIndex As Integer, data As Variant, ByRef nIndex As Integer) As Single
+
+	ReadByteArray ReadFloat, data, sIndex, 4
+	nIndex = sIndex + 4
+
+End Function
+
+Function WriteFloat(sIndex As Integer, number As Float, data As Variant) As Integer
+
+	WriteByteArray number, data, sIndex
+	WriteFloat = sIndex + 4
+
+End Function
+
+Function ReadDouble(ByVal sIndex As Integer, data As Variant, ByRef nIndex As Integer) As Double
+
+	ReadByteArray ReadDouble, data, sIndex, 8
+	nIndex = sIndex + 8
+
+End Function
+
+Function WriteDouble(sIndex As Integer, number As Double, data As Variant) As Integer
+
+	WriteByteArray number, data, sIndex, 8
+	WriteDouble = sIndex + 8
+
+End Function
+
+Function ReadPosition(ByVal sIndex As Integer, data As Variant, ByRef nIndex As Integer) As Position
+
+	Dim pos As Position
+
+	LetX pos = ReadFloat(sIndex, data, nIndex)
+	LetY pos = ReadFloat(nIndex, data, nIndex)
+	LetZ pos = ReadFloat(nIndex, data, nIndex)
+	LetRx pos = ReadFloat(nIndex, data, nIndex)
+	LetRy pos = ReadFloat(nIndex, data, nIndex)
+	LetRz pos = ReadFloat(nIndex, data, nIndex)
+	LetF pos = ReadInt16(nIndex, data, nIndex)
+
+	ReadPosition = pos
+
+End Function
+
+Function WritePosition(sIndex As Integer, pos As Position, data As Variant) As Integer
+
+	Dim cIndex As Integer
+	
+	cIndex = sIndex
+
+	cIndex = WriteFloat(cIndex, PosX(pos), data)
+	cIndex = WriteFloat(cIndex, PosY(pos), data)
+	cIndex = WriteFloat(cIndex, PosZ(pos), data)
+	cIndex = WriteFloat(cIndex, PosRx(pos), data)
+	cIndex = WriteFloat(cIndex, PosRy(pos), data)
+	cIndex = WriteFloat(cIndex, PosRz(pos), data)
+	cIndex = WriteInt16(cIndex, Fig(pos), data)
+
+	WritePosition = cIndex
+
+End Function
+
+Function ReadJoint(ByVal sIndex As Integer, data As Variant, ByRef nIndex As Integer) As Joint
+
+	Dim jo As Joint
+
+	LetJ 1, jo = ReadFloat(sIndex, data, nIndex)
+	LetJ 2, jo = ReadFloat(nIndex, data, nIndex)
+	LetJ 3, jo = ReadFloat(nIndex, data, nIndex)
+	LetJ 4, jo = ReadFloat(nIndex, data, nIndex)
+	LetJ 5, jo = ReadFloat(nIndex, data, nIndex)
+	LetJ 6, jo = ReadFloat(nIndex, data, nIndex)
+	LetJ 7, jo = ReadFloat(nIndex, data, nIndex)
+	LetJ 8, jo = ReadFloat(nIndex, data, nIndex)
+
+	ReadJoint = jo
+
+End Function
+
+Function WriteJoint(sIndex As Integer, jo As Joint, data As Variant) As Integer
+
+	Dim cIndex As Integer
+
+	cIndex = sIndex
+
+	cIndex = WriteFloat(cIndex, Joint(1, jo), data)
+	cIndex = WriteFloat(cIndex, Joint(2, jo), data)
+	cIndex = WriteFloat(cIndex, Joint(3, jo), data)
+	cIndex = WriteFloat(cIndex, Joint(4, jo), data)
+	cIndex = WriteFloat(cIndex, Joint(5, jo), data)
+	cIndex = WriteFloat(cIndex, Joint(6, jo), data)
+	cIndex = WriteFloat(cIndex, Joint(7, jo), data)
+	cIndex = WriteFloat(cIndex, Joint(8, jo), data)
+
+	WriteJoint = cIndex
+
+End Function
+
+Function ReadString(ByVal sIndex As Integer, length As Integer, data As Variant, ByRef nIndex As Integer) As String
+
+	ReadByteArray ReadString, data, sIndex, length
+
+End Function
+
+Function WriteString(sIndex As Integer, wString As String, data As Variant) As Integer
+
+	WriteByteArray wString, data, sIndex, Len(wString)
+	WriteString = sIndex + Len(wString)
+
+End Function
+
+Function AreArraysDifferent(array1 As Variant, array2 As Variant) As Integer
+
+	If GetArrayCount(array1) <> GetArrayCount(array2) Then
+
+		AreArraysDifferent = True
+		Exit Function
+
+	End If
+
+	Dim dIndex As Integer
+
+	For dIndex = 0 To UBound(array1)
+
+		If array1(dIndex) <> array2(dIndex) Then
+
+			AreArraysDifferent = True
+			Exit Function
+
+		End If
+
+	Next
+
+	AreArraysDifferent = False
+
+End Function
+
+Function GetArrayCount(inputArray As Variant) As Integer
+
+	' Handle empty variant
+	On Error GoTo lbReturnNull
+
+	GetArrayCount = UBound(inputArray) + 1
+
+	Exit Function
+
+lbReturnNull:
+	GetArrayCount = 0
+
+End Function
